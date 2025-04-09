@@ -278,7 +278,16 @@ index c355cb42f7ec3b..23b17e1886310e 100644
  	FIPS, internal/godebug < crypto/fips140;
  
  	crypto, hash !< FIPS;
+@@ -510,13 +528,12 @@ var depsRules = `
+ 	FIPS, internal/godebug, hash, embed,
  	crypto/internal/boring/sig,
+ 	crypto/internal/boring/syso,
+-	crypto/internal/boring/bcache
+-	< crypto/internal/fips140only
+-	< crypto
+-	< crypto/subtle
++	crypto/internal/boring/bcache,
++	crypto/internal/fips140only,
 +	crypto,
 +	crypto/cipher
  	< crypto/sha3
