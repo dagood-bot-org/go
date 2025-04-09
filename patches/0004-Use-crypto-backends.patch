@@ -68,27 +68,28 @@ Subject: [PATCH] Use crypto backends
  src/crypto/sha512/sha512.go                   |   2 +-
  src/crypto/sha512/sha512_test.go              |  24 ++-
  src/crypto/tls/cipher_suites.go               |   2 +-
+ src/crypto/tls/defaults_boring.go             |   2 +-
+ src/crypto/tls/defaults_fips140.go            |   2 +-
+ src/crypto/tls/fips140_test.go                |   2 +-
  src/crypto/tls/fipsonly/fipsonly.go           |   2 +-
  src/crypto/tls/fipsonly/fipsonly_test.go      |   2 +-
  src/crypto/tls/handshake_client.go            |  12 +-
- src/crypto/tls/handshake_client_tls13.go      |  16 +-
+ src/crypto/tls/handshake_client_tls13.go      |   2 +-
  src/crypto/tls/handshake_server.go            |  10 +-
- src/crypto/tls/handshake_server_tls13.go      |  27 ++-
- src/crypto/tls/internal/fips140tls/fipstls.go |   4 +-
+ src/crypto/tls/handshake_server_tls13.go      |  13 +-
  src/crypto/tls/internal/tls13/doc.go          |  18 ++
  src/crypto/tls/internal/tls13/tls13.go        | 182 ++++++++++++++++++
  src/crypto/tls/key_schedule.go                |   2 +-
  src/crypto/tls/prf.go                         |  41 ++++
- src/go/build/deps_test.go                     |   5 +-
+ src/go/build/deps_test.go                     |   3 +-
  src/hash/boring_test.go                       |   9 +
  src/hash/example_test.go                      |   2 +
  src/hash/marshal_test.go                      |   4 +
  src/hash/notboring_test.go                    |   9 +
  src/net/lookup_test.go                        |   3 +
- src/net/smtp/smtp_test.go                     |  72 ++++---
  src/os/exec/exec_test.go                      |   9 +
  src/runtime/pprof/vminfo_darwin_test.go       |   6 +
- 84 files changed, 1163 insertions(+), 121 deletions(-)
+ 85 files changed, 1095 insertions(+), 89 deletions(-)
  create mode 100644 src/crypto/dsa/boring.go
  create mode 100644 src/crypto/dsa/notboring.go
  create mode 100644 src/crypto/ecdsa/badlinkname.go
@@ -138,7 +139,7 @@ index 4fcc508f8ed48e..eb5ef7df6eaca1 100644
  	// No need to enable PGO for toolchain2.
  	goInstall(toolenv(), goBootstrap, append([]string{"-pgo=off"}, toolchain...)...)
 diff --git a/src/cmd/dist/test.go b/src/cmd/dist/test.go
-index 6199dbbb93cdcc..6592cf97e482dd 100644
+index e939768a2f4809..3197a8b81c2886 100644
 --- a/src/cmd/dist/test.go
 +++ b/src/cmd/dist/test.go
 @@ -710,7 +710,7 @@ func (t *tester) registerTests() {
@@ -1303,7 +1304,7 @@ index c4f6a95e3ecbe5..4cca9bcfaf905a 100644
  		t.Skipf("skipping: %v", err)
  	}
 diff --git a/src/crypto/internal/fips140test/fips_test.go b/src/crypto/internal/fips140test/fips_test.go
-index 3ed6152ea380d0..510c41e0ee6d96 100644
+index 08d60933ef38b8..8840db05bde791 100644
 --- a/src/crypto/internal/fips140test/fips_test.go
 +++ b/src/crypto/internal/fips140test/fips_test.go
 @@ -15,7 +15,7 @@ package fipstest
@@ -1418,7 +1419,7 @@ index 2353ea85b54baf..f1d3668e6abff4 100644
  
  var bench = New()
 diff --git a/src/crypto/pbkdf2/pbkdf2.go b/src/crypto/pbkdf2/pbkdf2.go
-index dd5fc33f2120c3..7ce0da53887a40 100644
+index dff2e6cb355c5f..7d1348cadc3f61 100644
 --- a/src/crypto/pbkdf2/pbkdf2.go
 +++ b/src/crypto/pbkdf2/pbkdf2.go
 @@ -11,6 +11,7 @@
@@ -2214,7 +2215,7 @@ index 7e80f49dea4315..6b21e0a7c8e386 100644
  	})
  }
 diff --git a/src/crypto/tls/cipher_suites.go b/src/crypto/tls/cipher_suites.go
-index 01d65688284f97..d8a26c24024348 100644
+index 2a96fa69036a07..f3c19c7faf1c21 100644
 --- a/src/crypto/tls/cipher_suites.go
 +++ b/src/crypto/tls/cipher_suites.go
 @@ -10,7 +10,7 @@ import (
@@ -2226,6 +2227,45 @@ index 01d65688284f97..d8a26c24024348 100644
  	fipsaes "crypto/internal/fips140/aes"
  	"crypto/internal/fips140/aes/gcm"
  	"crypto/rc4"
+diff --git a/src/crypto/tls/defaults_boring.go b/src/crypto/tls/defaults_boring.go
+index 96406acfca0f54..45da186a7123bd 100644
+--- a/src/crypto/tls/defaults_boring.go
++++ b/src/crypto/tls/defaults_boring.go
+@@ -2,7 +2,7 @@
+ // Use of this source code is governed by a BSD-style
+ // license that can be found in the LICENSE file.
+ 
+-//go:build boringcrypto
++//go:build goexperiment.systemcrypto
+ 
+ package tls
+ 
+diff --git a/src/crypto/tls/defaults_fips140.go b/src/crypto/tls/defaults_fips140.go
+index 472bb807f04dc5..28883a511d9091 100644
+--- a/src/crypto/tls/defaults_fips140.go
++++ b/src/crypto/tls/defaults_fips140.go
+@@ -2,7 +2,7 @@
+ // Use of this source code is governed by a BSD-style
+ // license that can be found in the LICENSE file.
+ 
+-//go:build !boringcrypto
++//go:build !goexperiment.systemcrypto
+ 
+ package tls
+ 
+diff --git a/src/crypto/tls/fips140_test.go b/src/crypto/tls/fips140_test.go
+index c22ad485ccdae5..7dfb00580890e5 100644
+--- a/src/crypto/tls/fips140_test.go
++++ b/src/crypto/tls/fips140_test.go
+@@ -7,7 +7,7 @@ package tls
+ import (
+ 	"crypto/ecdsa"
+ 	"crypto/elliptic"
+-	"crypto/internal/boring"
++	boring "crypto/internal/backend"
+ 	"crypto/rand"
+ 	"crypto/rsa"
+ 	"crypto/x509"
 diff --git a/src/crypto/tls/fipsonly/fipsonly.go b/src/crypto/tls/fipsonly/fipsonly.go
 index e702f44e986746..e506a0d8841237 100644
 --- a/src/crypto/tls/fipsonly/fipsonly.go
@@ -2253,7 +2293,7 @@ index 027bc22c33c921..eba08da985f832 100644
  package fipsonly
  
 diff --git a/src/crypto/tls/handshake_client.go b/src/crypto/tls/handshake_client.go
-index 1be0c82c4bce14..be59a46bc2fc6b 100644
+index 30f2e2a2a2c43d..a25a29a2a26785 100644
 --- a/src/crypto/tls/handshake_client.go
 +++ b/src/crypto/tls/handshake_client.go
 @@ -11,11 +11,11 @@ import (
@@ -2269,7 +2309,7 @@ index 1be0c82c4bce14..be59a46bc2fc6b 100644
  	"crypto/x509"
  	"errors"
  	"fmt"
-@@ -554,7 +554,15 @@ func (c *Conn) pickTLSVersion(serverHello *serverHelloMsg) error {
+@@ -543,7 +543,15 @@ func (c *Conn) pickTLSVersion(serverHello *serverHelloMsg) error {
  
  // Does the handshake, either a full one or resumes old session. Requires hs.c,
  // hs.hello, hs.serverHello, and, optionally, hs.session to be set.
@@ -2285,18 +2325,14 @@ index 1be0c82c4bce14..be59a46bc2fc6b 100644
 +	}()
  	c := hs.c
  
- 	isResume, err := hs.processServerHello()
+ 	// If we did not load a session (hs.session == nil), but we did set a
 diff --git a/src/crypto/tls/handshake_client_tls13.go b/src/crypto/tls/handshake_client_tls13.go
-index c0396e75796add..2c00e119cb66e4 100644
+index 66dc76f72d6e6f..c8bb0c02d64afd 100644
 --- a/src/crypto/tls/handshake_client_tls13.go
 +++ b/src/crypto/tls/handshake_client_tls13.go
-@@ -8,12 +8,12 @@ import (
- 	"bytes"
- 	"context"
- 	"crypto"
-+	"crypto/hkdf"
+@@ -11,9 +11,9 @@ import (
+ 	"crypto/hkdf"
  	"crypto/hmac"
--	"crypto/internal/fips140/hkdf"
  	"crypto/internal/fips140/mlkem"
 -	"crypto/internal/fips140/tls13"
  	"crypto/rsa"
@@ -2305,36 +2341,8 @@ index c0396e75796add..2c00e119cb66e4 100644
  	"errors"
  	"hash"
  	"slices"
-@@ -90,8 +90,12 @@ func (hs *clientHandshakeStateTLS13) handshake() error {
- 		confTranscript.Write(hs.serverHello.original[:30])
- 		confTranscript.Write(make([]byte, 8))
- 		confTranscript.Write(hs.serverHello.original[38:])
-+		secret, err := hkdf.Extract(hs.suite.hash.New, hs.echContext.innerHello.random, nil)
-+		if err != nil {
-+			return err
-+		}
- 		acceptConfirmation := tls13.ExpandLabel(hs.suite.hash.New,
--			hkdf.Extract(hs.suite.hash.New, hs.echContext.innerHello.random, nil),
-+			secret,
- 			"ech accept confirmation",
- 			confTranscript.Sum(nil),
- 			8,
-@@ -264,8 +268,12 @@ func (hs *clientHandshakeStateTLS13) processHelloRetryRequest() error {
- 			copy(hrrHello, hs.serverHello.original)
- 			hrrHello = bytes.Replace(hrrHello, hs.serverHello.encryptedClientHello, make([]byte, 8), 1)
- 			confTranscript.Write(hrrHello)
-+			secret, err := hkdf.Extract(hs.suite.hash.New, hs.echContext.innerHello.random, nil)
-+			if err != nil {
-+				return err
-+			}
- 			acceptConfirmation := tls13.ExpandLabel(hs.suite.hash.New,
--				hkdf.Extract(hs.suite.hash.New, hs.echContext.innerHello.random, nil),
-+				secret,
- 				"hrr ech accept confirmation",
- 				confTranscript.Sum(nil),
- 				8,
 diff --git a/src/crypto/tls/handshake_server.go b/src/crypto/tls/handshake_server.go
-index 641bbec0c96fff..57704fb76d60a5 100644
+index 68c14b8a5a9fc3..66ac35f294abcb 100644
 --- a/src/crypto/tls/handshake_server.go
 +++ b/src/crypto/tls/handshake_server.go
 @@ -64,7 +64,15 @@ func (c *Conn) serverHandshake(ctx context.Context) error {
@@ -2355,16 +2363,13 @@ index 641bbec0c96fff..57704fb76d60a5 100644
  
  	if err := hs.processClientHello(); err != nil {
 diff --git a/src/crypto/tls/handshake_server_tls13.go b/src/crypto/tls/handshake_server_tls13.go
-index b6d455cd397e31..c8f1c4ad43fdc3 100644
+index 929d865dd403ef..4548d0660987f5 100644
 --- a/src/crypto/tls/handshake_server_tls13.go
 +++ b/src/crypto/tls/handshake_server_tls13.go
-@@ -8,13 +8,14 @@ import (
- 	"bytes"
- 	"context"
+@@ -10,11 +10,12 @@ import (
  	"crypto"
-+	"crypto/hkdf"
+ 	"crypto/hkdf"
  	"crypto/hmac"
--	"crypto/internal/fips140/hkdf"
 +	boring "crypto/internal/backend"
  	"crypto/internal/fips140/mlkem"
 -	"crypto/internal/fips140/tls13"
@@ -2398,56 +2403,6 @@ index b6d455cd397e31..c8f1c4ad43fdc3 100644
  	state, err := marshaler.MarshalBinary()
  	if err != nil {
  		return nil
-@@ -572,8 +577,12 @@ func (hs *serverHandshakeStateTLS13) doHelloRetryRequest(selectedGroup CurveID)
- 		if err := transcriptMsg(helloRetryRequest, confTranscript); err != nil {
- 			return nil, err
- 		}
-+		secret, err := hkdf.Extract(hs.suite.hash.New, hs.clientHello.random, nil)
-+		if err != nil {
-+			return nil, err
-+		}
- 		acceptConfirmation := tls13.ExpandLabel(hs.suite.hash.New,
--			hkdf.Extract(hs.suite.hash.New, hs.clientHello.random, nil),
-+			secret,
- 			"hrr ech accept confirmation",
- 			confTranscript.Sum(nil),
- 			8,
-@@ -734,9 +743,13 @@ func (hs *serverHandshakeStateTLS13) sendServerParameters() error {
- 		if err := transcriptMsg(hs.hello, echTranscript); err != nil {
- 			return err
- 		}
-+		secret, err := hkdf.Extract(hs.suite.hash.New, hs.clientHello.random, nil)
-+		if err != nil {
-+			return err
-+		}
- 		// compute the acceptance message
- 		acceptConfirmation := tls13.ExpandLabel(hs.suite.hash.New,
--			hkdf.Extract(hs.suite.hash.New, hs.clientHello.random, nil),
-+			secret,
- 			"ech accept confirmation",
- 			echTranscript.Sum(nil),
- 			8,
-diff --git a/src/crypto/tls/internal/fips140tls/fipstls.go b/src/crypto/tls/internal/fips140tls/fipstls.go
-index 24d78d60cf5b64..0b87185683ab8b 100644
---- a/src/crypto/tls/internal/fips140tls/fipstls.go
-+++ b/src/crypto/tls/internal/fips140tls/fipstls.go
-@@ -6,14 +6,14 @@
- package fips140tls
- 
- import (
--	"crypto/internal/fips140"
-+	"crypto/fips140"
- 	"sync/atomic"
- )
- 
- var required atomic.Bool
- 
- func init() {
--	if fips140.Enabled {
-+	if fips140.Enabled() {
- 		Force()
- 	}
- }
 diff --git a/src/crypto/tls/internal/tls13/doc.go b/src/crypto/tls/internal/tls13/doc.go
 new file mode 100644
 index 00000000000000..acfa551001af9c
@@ -2743,7 +2698,7 @@ index e7369542a73270..ff52175e4ac636 100644
  	}
  }
 diff --git a/src/go/build/deps_test.go b/src/go/build/deps_test.go
-index 1889403cac91e0..01609e5e6a9d62 100644
+index 70f0713b6359f8..01609e5e6a9d62 100644
 --- a/src/go/build/deps_test.go
 +++ b/src/go/build/deps_test.go
 @@ -520,7 +520,7 @@ var depsRules = `
@@ -2763,15 +2718,6 @@ index 1889403cac91e0..01609e5e6a9d62 100644
  	< CRYPTO;
  
  	CGO, fmt, net !< CRYPTO;
-@@ -594,7 +595,7 @@ var depsRules = `
- 
- 	# TLS, Prince of Dependencies.
- 
--	FIPS, sync/atomic < crypto/tls/internal/fips140tls;
-+	crypto/fips140, sync/atomic < crypto/tls/internal/fips140tls;
- 
- 	crypto/internal/boring/sig, crypto/tls/internal/fips140tls < crypto/tls/fipsonly;
- 
 diff --git a/src/hash/boring_test.go b/src/hash/boring_test.go
 new file mode 100644
 index 00000000000000..52748c44698076
@@ -2851,97 +2797,6 @@ index 514cbd098ae772..8ec689416dde1d 100644
  	mustHaveExternalNetwork(t)
  
  	const testNXDOMAIN = "invalid.invalid."
-diff --git a/src/net/smtp/smtp_test.go b/src/net/smtp/smtp_test.go
-index 389eda9ad54b99..110d60beb0e70c 100644
---- a/src/net/smtp/smtp_test.go
-+++ b/src/net/smtp/smtp_test.go
-@@ -1136,40 +1136,60 @@ func sendMail(hostPort string) error {
- 
- // localhostCert is a PEM-encoded TLS cert generated from src/crypto/tls:
- //
--//	go run generate_cert.go --rsa-bits 1024 --host 127.0.0.1,::1,example.com \
-+//	Use a 2048-bits RSA key to make it FIPS-compliant.
-+//	go run generate_cert.go --rsa-bits 2048 --host 127.0.0.1,::1,example.com \
- //		--ca --start-date "Jan 1 00:00:00 1970" --duration=1000000h
- var localhostCert = []byte(`
- -----BEGIN CERTIFICATE-----
--MIICFDCCAX2gAwIBAgIRAK0xjnaPuNDSreeXb+z+0u4wDQYJKoZIhvcNAQELBQAw
--EjEQMA4GA1UEChMHQWNtZSBDbzAgFw03MDAxMDEwMDAwMDBaGA8yMDg0MDEyOTE2
--MDAwMFowEjEQMA4GA1UEChMHQWNtZSBDbzCBnzANBgkqhkiG9w0BAQEFAAOBjQAw
--gYkCgYEA0nFbQQuOWsjbGtejcpWz153OlziZM4bVjJ9jYruNw5n2Ry6uYQAffhqa
--JOInCmmcVe2siJglsyH9aRh6vKiobBbIUXXUU1ABd56ebAzlt0LobLlx7pZEMy30
--LqIi9E6zmL3YvdGzpYlkFRnRrqwEtWYbGBf3znO250S56CCWH2UCAwEAAaNoMGYw
--DgYDVR0PAQH/BAQDAgKkMBMGA1UdJQQMMAoGCCsGAQUFBwMBMA8GA1UdEwEB/wQF
--MAMBAf8wLgYDVR0RBCcwJYILZXhhbXBsZS5jb22HBH8AAAGHEAAAAAAAAAAAAAAA
--AAAAAAEwDQYJKoZIhvcNAQELBQADgYEAbZtDS2dVuBYvb+MnolWnCNqvw1w5Gtgi
--NmvQQPOMgM3m+oQSCPRTNGSg25e1Qbo7bgQDv8ZTnq8FgOJ/rbkyERw2JckkHpD4
--n4qcK27WkEDBtQFlPihIM8hLIuzWoi/9wygiElTy/tVL3y7fGCvY2/k1KBthtZGF
--tN8URjVmyEo=
-+MIIDOTCCAiGgAwIBAgIQKhWw7zkzXjX78HaPlVbNrjANBgkqhkiG9w0BAQsFADAS
-+MRAwDgYDVQQKEwdBY21lIENvMCAXDTcwMDEwMTAwMDAwMFoYDzIwODQwMTI5MTYw
-+MDAwWjASMRAwDgYDVQQKEwdBY21lIENvMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A
-+MIIBCgKCAQEAy1EYLA8IFvZyUPY+uI7KToneaQPvIzQiOeWlDnFnoanw6h3KpoVc
-++yNbinK41WfXoSN/1kJ9gmGiFhJTPZ4rQ7DJsD7ethcpuz4uIimdWPohcBzwgbx4
-+wjhUgfUsCO6m76fFqrhbkHMDiS2iUjg2gyMVQCrqi8EuBW16yFQdJqPU04p+2rYw
-+eJ9lzdeSLR4yvx7p1JS8sS4DbSyrAUaJ9J1sH/gu0nSHNMo7WtIu9K8JmPeYR4X5
-+5KLURBU9PmvoGW+5ss/xS6SnacHAD9FebNPQqGB/soBA9gdJIN+5KW0xcE38Zz5Q
-+wAAUiU+VlWuZmge0sI8Ix8uIPIvGQSKN0wIDAQABo4GIMIGFMA4GA1UdDwEB/wQE
-+AwICpDATBgNVHSUEDDAKBggrBgEFBQcDATAPBgNVHRMBAf8EBTADAQH/MB0GA1Ud
-+DgQWBBRNMP9Cr0yrXpMpsgEtDr8FPmUEazAuBgNVHREEJzAlggtleGFtcGxlLmNv
-+bYcEfwAAAYcQAAAAAAAAAAAAAAAAAAAAATANBgkqhkiG9w0BAQsFAAOCAQEAF0/z
-+KEnZrAsz4ov4fEvKY42EbKPm8s0pklPLmKVIh/iS7jTxxxvgDtOToiJ6IXY8Cfb3
-+nG1i78YakoVPUL5Cfh5LKDefMoefk6575ur2+gSdzgNmKUnlVfOMfpflia/ugATZ
-+5ORhpmKRKWzwXQ67S5XeVlZAehTsywQstsDu8WEVoSUnRSk1jZsCThOQfdlpox+K
-+71rGPSTxB9yCHMzZsk4xyZlGLaC0vDSJ+Zb5gWvAcvkSnpREvmc3/9TaW/lbUed6
-+uhO17lARcUhPCzkR5wAZCo/PihHMSXL8cqT4QdIux75OBxB/3EgLHL7KQw28A50g
-+DogldK8zx1ZADmupUA==
- -----END CERTIFICATE-----`)
- 
- // localhostKey is the private key for localhostCert.
- var localhostKey = []byte(testingKey(`
- -----BEGIN RSA TESTING KEY-----
--MIICXgIBAAKBgQDScVtBC45ayNsa16NylbPXnc6XOJkzhtWMn2Niu43DmfZHLq5h
--AB9+Gpok4icKaZxV7ayImCWzIf1pGHq8qKhsFshRddRTUAF3np5sDOW3QuhsuXHu
--lkQzLfQuoiL0TrOYvdi90bOliWQVGdGurAS1ZhsYF/fOc7bnRLnoIJYfZQIDAQAB
--AoGBAMst7OgpKyFV6c3JwyI/jWqxDySL3caU+RuTTBaodKAUx2ZEmNJIlx9eudLA
--kucHvoxsM/eRxlxkhdFxdBcwU6J+zqooTnhu/FE3jhrT1lPrbhfGhyKnUrB0KKMM
--VY3IQZyiehpxaeXAwoAou6TbWoTpl9t8ImAqAMY8hlULCUqlAkEA+9+Ry5FSYK/m
--542LujIcCaIGoG1/Te6Sxr3hsPagKC2rH20rDLqXwEedSFOpSS0vpzlPAzy/6Rbb
--PHTJUhNdwwJBANXkA+TkMdbJI5do9/mn//U0LfrCR9NkcoYohxfKz8JuhgRQxzF2
--6jpo3q7CdTuuRixLWVfeJzcrAyNrVcBq87cCQFkTCtOMNC7fZnCTPUv+9q1tcJyB
--vNjJu3yvoEZeIeuzouX9TJE21/33FaeDdsXbRhQEj23cqR38qFHsF1qAYNMCQQDP
--QXLEiJoClkR2orAmqjPLVhR3t2oB3INcnEjLNSq8LHyQEfXyaFfu4U9l5+fRPL2i
--jiC0k/9L5dHUsF0XZothAkEA23ddgRs+Id/HxtojqqUT27B8MT/IGNrYsp4DvS/c
--qgkeluku4GjxRlDMBuXk94xOBEinUs+p/hwP1Alll80Tpg==
-+MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDLURgsDwgW9nJQ
-+9j64jspOid5pA+8jNCI55aUOcWehqfDqHcqmhVz7I1uKcrjVZ9ehI3/WQn2CYaIW
-+ElM9nitDsMmwPt62Fym7Pi4iKZ1Y+iFwHPCBvHjCOFSB9SwI7qbvp8WquFuQcwOJ
-+LaJSODaDIxVAKuqLwS4FbXrIVB0mo9TTin7atjB4n2XN15ItHjK/HunUlLyxLgNt
-+LKsBRon0nWwf+C7SdIc0yjta0i70rwmY95hHhfnkotREFT0+a+gZb7myz/FLpKdp
-+wcAP0V5s09CoYH+ygED2B0kg37kpbTFwTfxnPlDAABSJT5WVa5maB7SwjwjHy4g8
-+i8ZBIo3TAgMBAAECggEAc7dv/oN/ozIY1iOQhxId6p1lTHfEv1CIulMNoi7BQK2s
-+RFM4Z5Y32WfCTgYFVNCJVVkTBStKq85Npio/3i4Libcw03K05wY/5iX5s8/jkiSq
-+q1iNOgm+4SuWTXDw4xSRRo1CX2wWERykwoqKfCkqPXDWQ3Mpkukb/FLXMvVMshRA
-+9v9L6MyrCnsFHl8q2J6hcC+RQJ0pb5I4NF6KhMxABWxxxlDO0zYLA0wfhEn8nj/l
-+J37QLHmsA7pzxo+NqDTPgpfBuuTbRVGMkC+fPCXYinbubBeURFO2j2yBlseK+Vbd
-+sEffiAnPr4ocCz0k0tHAMMY7hKHup2HWuJGFu0IhAQKBgQDkKFEEcYWNx5Ybl1LV
-+qr2qIYofpFL+Gu5MWSZxzZbE8u9v0tTsp8SRhXkgjeHY6qjBUBnLgklOKwSigQAm
-+j9de44cXjnUIArzeAHsH3fzpYrLfsvBla6wQyr34D0chVCZ0cX/s/zXkSN4PcEkA
-+GGfKAENrGskDyc4uq1sIactu8wKBgQDkIL/XT7ysvsaxA+SfIs2CHgb8GNKgtoI1
-+QyR0+MfeJGCLwI9qcLbVzXda34qrzQw3YLIm2VHqhzJ4zb0gnyJ4adPZYwpLTgiU
-+jVksBVIwBTfbxYvF2+07poCSobCFKLGQnAujhDDIGDAUKQXQmFcqUNWw0QHfQzkS
-+xs36H27doQKBgQCjM8+YLRgKbc0LGXhwTHz1GJ6zuZiAGYWB6XddimEhqmDpjVcv
-+nWY3bdFSHwuBXYGvHfwFncGP/6eGEl6oNtYpEvoMOKOwQj0VVCStYPZLf4VSDK52
-+7ckcDdpLeao4xffn7VRDk97Z1+G4C2q8fbioPv36vCMz6YPp0DsCzqJtTwKBgCUN
-+4LtDW10fu7xC6p6ik4jgAbhu+79ZBbtLBZ/uTOCbPgdVJrZeSoRd1FYxWx/etW5F
-+SYqf3/tdLGiM2nxy/LFcVynHOYPTz/b5IpPQ5XGhV1peMv7XYyg+OkIW+0oVuwnH
-+HujXbukBbMXJiAVCyV25NYx71ncCP0H6grhu5J4hAoGAUaketZWHD/ks9JCoPtfy
-+pNnXqrIvTp1cSGJpVUQT/DUqAjevyZ5Q8PFPf09BZ6uYlXtCqsp7pA/fqNdlJRPR
-+tHRjpZ5XauBiFdpRNH4tJBTiWWhyuWhkWn369Az7HP3CIlJLeq2FlKCvMClcO4op
-+Qc9LHT7jqtcy+LqAVBpsJ/o=
- -----END RSA TESTING KEY-----`))
- 
- func testingKey(s string) string { return strings.ReplaceAll(s, "TESTING KEY", "PRIVATE KEY") }
 diff --git a/src/os/exec/exec_test.go b/src/os/exec/exec_test.go
 index 8c623871932f7d..2fa55073f5c19c 100644
 --- a/src/os/exec/exec_test.go
